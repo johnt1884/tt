@@ -1943,10 +1943,11 @@ function applyFiltersToMessageContent(message, rules) {
 
             if (dividerEnabled) {
                 const dividerSpan = document.createElement('span');
-                dividerSpan.textContent = ` ${dividerSymbol} `;
+                dividerSpan.textContent = dividerSymbol;
                 dividerSpan.style.color = dividerColor;
                 dividerSpan.style.fontSize = '10px';
-                dividerSpan.style.margin = '0 3px';
+                dividerSpan.style.margin = '0 6px';
+                dividerSpan.style.flexShrink = '0';
                 titleTimeContainer.appendChild(dividerSpan);
             }
 
@@ -3737,9 +3738,16 @@ function createMessageElementDOM(message, mediaLoadPromises, uniqueImageViewerHa
                     plusIcon.style.color = threadColor;
                     plusIcon.title = 'Load next reply in truncated chain';
                     plusIcon.style.fontWeight = 'bold';
-                    plusIcon.style.fontSize = '18px';
+                    plusIcon.style.fontSize = '10px';
                     plusIcon.style.marginRight = '8px';
                     plusIcon.style.cursor = 'pointer';
+                    plusIcon.style.width = '12px';
+                    plusIcon.style.height = '12px';
+                    plusIcon.style.display = 'flex';
+                    plusIcon.style.alignItems = 'center';
+                    plusIcon.style.justifyContent = 'center';
+                    plusIcon.style.borderRadius = '4px';
+                    plusIcon.style.backgroundColor = 'var(--otk-plus-icon-bg-color)';
 
                     plusIcon.addEventListener('click', async (e) => {
                         e.stopPropagation();
@@ -5823,16 +5831,54 @@ async function backgroundRefreshThreadsAndMessages(options = {}) { // Added opti
         contentArea.innerHTML = ''; // Clear previous content
 
         const clocks = JSON.parse(localStorage.getItem('otkClocks') || '[]');
+        let draggedClockId = null;
+
+        const clockListContainer = document.createElement('div');
+        contentArea.appendChild(clockListContainer);
 
         clocks.forEach((clock, index) => {
             const clockRow = document.createElement('div');
+            clockRow.draggable = true;
+            clockRow.dataset.clockId = clock.id;
             clockRow.style.cssText = `
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
                 padding: 8px 0;
                 border-bottom: 1px solid #444;
+                cursor: grab;
             `;
+
+            clockRow.addEventListener('dragstart', (e) => {
+                draggedClockId = clock.id;
+                e.dataTransfer.effectAllowed = 'move';
+                e.target.style.opacity = '0.5';
+            });
+
+            clockRow.addEventListener('dragend', (e) => {
+                e.target.style.opacity = '1';
+                const allRows = [...clockListContainer.querySelectorAll('div[draggable="true"]')];
+                allRows.forEach(row => {
+                    row.style.borderTop = '';
+                    row.style.borderBottom = '';
+                });
+            });
+
+            clockRow.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                const allRows = [...clockListContainer.querySelectorAll('div[draggable="true"]')];
+                allRows.forEach(row => {
+                    row.style.borderTop = '';
+                    row.style.borderBottom = '';
+                });
+                const rect = clockRow.getBoundingClientRect();
+                const halfwayY = rect.top + rect.height / 2;
+                if (e.clientY < halfwayY) {
+                    clockRow.style.borderTop = '2px solid #ff8040';
+                } else {
+                    clockRow.style.borderBottom = '2px solid #ff8040';
+                }
+            });
 
             const clockName = document.createElement('span');
             clockName.textContent = clock.displayPlace || clock.timezone;
@@ -5869,7 +5915,38 @@ async function backgroundRefreshThreadsAndMessages(options = {}) { // Added opti
             }
 
             clockRow.appendChild(buttonsWrapper);
-            contentArea.appendChild(clockRow);
+            clockListContainer.appendChild(clockRow);
+        });
+
+        clockListContainer.addEventListener('drop', (e) => {
+            e.preventDefault();
+            const targetRow = e.target.closest('div[draggable="true"]');
+            if (!targetRow || draggedClockId === null) return;
+
+            let currentClocks = JSON.parse(localStorage.getItem('otkClocks') || '[]');
+            const draggedIndex = currentClocks.findIndex(c => c.id === draggedClockId);
+            const targetIndex = currentClocks.findIndex(c => c.id === parseInt(targetRow.dataset.clockId));
+
+            if (draggedIndex === -1 || targetIndex === -1) return;
+
+            const rect = targetRow.getBoundingClientRect();
+            const halfwayY = rect.top + rect.height / 2;
+            const insertBefore = e.clientY < halfwayY;
+
+            const [draggedClock] = currentClocks.splice(draggedIndex, 1);
+            let newIndex;
+            if (insertBefore) {
+                newIndex = currentClocks.findIndex(c => c.id === parseInt(targetRow.dataset.clockId));
+            } else {
+                newIndex = currentClocks.findIndex(c => c.id === parseInt(targetRow.dataset.clockId)) + 1;
+            }
+
+            currentClocks.splice(newIndex, 0, draggedClock);
+
+            localStorage.setItem('otkClocks', JSON.stringify(currentClocks));
+            renderClockOptions();
+            renderClocks();
+            draggedClockId = null;
         });
 
         const footerWrapper = document.createElement('div');
@@ -5901,8 +5978,29 @@ async function backgroundRefreshThreadsAndMessages(options = {}) { // Added opti
             document.getElementById('otk-clock-options-window').style.display = 'none';
         });
 
+        const cogPositionWrapper = document.createElement('div');
+        cogPositionWrapper.style.cssText = 'display: flex; justify-content: space-between; align-items: center; margin-top: 10px;';
+        const cogPositionLabel = document.createElement('label');
+        cogPositionLabel.textContent = 'Cog Position:';
+        const cogPositionSelect = document.createElement('select');
+        const options = ['Before Clocks', 'After Clocks'];
+        options.forEach(opt => {
+            const optionEl = document.createElement('option');
+            optionEl.value = opt.toLowerCase().replace(' ', '-');
+            optionEl.textContent = opt;
+            cogPositionSelect.appendChild(optionEl);
+        });
+        cogPositionSelect.value = localStorage.getItem('otkClockCogPosition') || 'after-clocks';
+        cogPositionSelect.addEventListener('change', () => {
+            localStorage.setItem('otkClockCogPosition', cogPositionSelect.value);
+            renderClocks();
+        });
+        cogPositionWrapper.appendChild(cogPositionLabel);
+        cogPositionWrapper.appendChild(cogPositionSelect);
+
         footerWrapper.appendChild(addClockBtn);
         footerWrapper.appendChild(closeBtn);
+        contentArea.appendChild(cogPositionWrapper);
         contentArea.appendChild(footerWrapper);
     }
 
@@ -5940,7 +6038,7 @@ async function backgroundRefreshThreadsAndMessages(options = {}) { // Added opti
         const cogIcon = document.createElement('span');
         cogIcon.id = 'otk-clock-cog';
         cogIcon.innerHTML = '&#x2699;';
-        cogIcon.style.cssText = 'font-size: 16px; margin-left: 10px; cursor: pointer; display: inline-block; color: var(--otk-clock-cog-color);';
+        cogIcon.style.cssText = 'font-size: 16px; margin: 0 10px; cursor: pointer; display: inline-block; color: var(--otk-clock-cog-color);';
         cogIcon.title = "Edit Clocks";
         cogIcon.addEventListener('click', () => {
             const clockOptionsWindow = document.getElementById('otk-clock-options-window');
@@ -5952,7 +6050,13 @@ async function backgroundRefreshThreadsAndMessages(options = {}) { // Added opti
                 }
             }
         });
-        clockContainer.appendChild(cogIcon);
+
+        const cogPosition = localStorage.getItem('otkClockCogPosition') || 'after-clocks';
+        if (cogPosition === 'before-clocks') {
+            clockContainer.insertBefore(cogIcon, clockContainer.firstChild);
+        } else {
+            clockContainer.appendChild(cogIcon);
+        }
 
         updateClockTimes();
     }
@@ -6372,6 +6476,12 @@ function applyThemeSettings(options = {}) {
         if (settings.anchorHighlightBorderColor) {
             document.documentElement.style.setProperty('--otk-anchor-highlight-border-color', settings.anchorHighlightBorderColor);
             updateColorInputs('anchor-border', settings.anchorHighlightBorderColor);
+        }
+
+        // '+' Icon Background
+        if (settings.plusIconBgColor) {
+            document.documentElement.style.setProperty('--otk-plus-icon-bg-color', settings.plusIconBgColor);
+            updateColorInputs('plus-icon-bg-color', settings.plusIconBgColor);
         }
 
         // Icon Colors
@@ -8108,6 +8218,9 @@ function applyThemeSettings(options = {}) {
         themeOptionsContainer.appendChild(createThemeOptionRow({ labelText: "Anchor Highlight Background:", storageKey: 'anchorHighlightBgColor', cssVariable: '--otk-anchor-highlight-bg-color', defaultValue: '#4a4a3a', inputType: 'color', idSuffix: 'anchor-bg', requiresRerender: true }));
         themeOptionsContainer.appendChild(createThemeOptionRow({ labelText: "Anchor Highlight Border:", storageKey: 'anchorHighlightBorderColor', cssVariable: '--otk-anchor-highlight-border-color', defaultValue: '#FFD700', inputType: 'color', idSuffix: 'anchor-border', requiresRerender: true }));
 
+        // '+' Icon Background
+        themeOptionsContainer.appendChild(createThemeOptionRow({ labelText: "'+' Icon Background:", storageKey: 'plusIconBgColor', cssVariable: '--otk-plus-icon-bg-color', defaultValue: 'transparent', inputType: 'color', idSuffix: 'plus-icon-bg-color', requiresRerender: false }));
+
         // Icon Colors
         themeOptionsContainer.appendChild(createThemeOptionRow({ labelText: "Blur Icon Color:", storageKey: 'blurIconColor', cssVariable: '--otk-blur-icon-color', defaultValue: '#000000', inputType: 'color', idSuffix: 'blur-icon' }));
         themeOptionsContainer.appendChild(createThemeOptionRow({ labelText: "Blur Icon Background:", storageKey: 'blurIconBgColor', cssVariable: '--otk-blur-icon-bg-color', defaultValue: '#d9d9d9', inputType: 'color', idSuffix: 'blur-icon-bg' }));
@@ -8658,6 +8771,9 @@ function applyThemeSettings(options = {}) {
                 // Anchor Highlight Colors
                 { storageKey: 'anchorHighlightBgColor', cssVariable: '--otk-anchor-highlight-bg-color', defaultValue: '#ffd1a4', inputType: 'color', idSuffix: 'anchor-bg' },
                 { storageKey: 'anchorHighlightBorderColor', cssVariable: '--otk-anchor-highlight-border-color', defaultValue: '#000000', inputType: 'color', idSuffix: 'anchor-border' },
+
+                // '+' Icon Background
+                { storageKey: 'plusIconBgColor', cssVariable: '--otk-plus-icon-bg-color', defaultValue: 'transparent', inputType: 'color', idSuffix: 'plus-icon-bg-color' },
 
                 // Icon Colors
                 { storageKey: 'blurIconColor', cssVariable: '--otk-blur-icon-color', defaultValue: '#000000', inputType: 'color', idSuffix: 'blur-icon' },
@@ -9629,6 +9745,7 @@ function setupClockOptionsWindow() {
                 --otk-anchor-highlight-border-color: #000000; /* Default: gold */
 
                 /* Icon Colors */
+                --otk-plus-icon-bg-color: transparent;
                 --otk-resize-icon-color: #000000;
                 --otk-resize-icon-bg-color: #d9d9d9;
                 --otk-blur-icon-color: #000000;
