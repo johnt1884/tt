@@ -1943,11 +1943,10 @@ function applyFiltersToMessageContent(message, rules) {
 
             if (dividerEnabled) {
                 const dividerSpan = document.createElement('span');
-                dividerSpan.textContent = dividerSymbol;
+                dividerSpan.textContent = ` ${dividerSymbol} `;
                 dividerSpan.style.color = dividerColor;
                 dividerSpan.style.fontSize = '10px';
-                dividerSpan.style.margin = '0 6px';
-                dividerSpan.style.flexShrink = '0';
+                dividerSpan.style.margin = '0 3px';
                 titleTimeContainer.appendChild(dividerSpan);
             }
 
@@ -3738,7 +3737,8 @@ function createMessageElementDOM(message, mediaLoadPromises, uniqueImageViewerHa
                     plusIcon.style.color = threadColor;
                     plusIcon.title = 'Load next reply in truncated chain';
                     plusIcon.style.fontWeight = 'bold';
-                    plusIcon.style.fontSize = '10px';
+                    plusIcon.style.fontSize = '11px';
+                    plusIcon.style.lineHeight = '12px';
                     plusIcon.style.marginRight = '8px';
                     plusIcon.style.cursor = 'pointer';
                     plusIcon.style.width = '12px';
@@ -5940,7 +5940,7 @@ async function backgroundRefreshThreadsAndMessages(options = {}) { // Added opti
             } else {
                 newIndex = currentClocks.findIndex(c => c.id === parseInt(targetRow.dataset.clockId)) + 1;
             }
-
+            
             currentClocks.splice(newIndex, 0, draggedClock);
 
             localStorage.setItem('otkClocks', JSON.stringify(currentClocks));
