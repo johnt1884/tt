@@ -9810,24 +9810,29 @@ function setupScrollButtons() {
     const scrollTopButton = document.getElementById('otk-scroll-top-btn');
     const scrollBottomButton = document.getElementById('otk-scroll-bottom-btn');
 
-    scrollTopButton.addEventListener('click', () => {
-        const messagesContainer = document.getElementById('otk-messages-container');
-        if (messagesContainer) {
-            messagesContainer.scrollTo({ top: 0, behavior: 'smooth' });
-        }
-    });
+    if (scrollTopButton) {
+        scrollTopButton.addEventListener('click', () => {
+            const messagesContainer = document.getElementById('otk-messages-container');
+            if (messagesContainer) {
+                messagesContainer.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+        });
+    }
 
-    scrollBottomButton.addEventListener('click', () => {
-        const messagesContainer = document.getElementById('otk-messages-container');
-        if (messagesContainer) {
-            messagesContainer.scrollTo({ top: messagesContainer.scrollHeight, behavior: 'smooth' });
-        }
-    });
+    if (scrollBottomButton) {
+        scrollBottomButton.addEventListener('click', () => {
+            const messagesContainer = document.getElementById('otk-messages-container');
+            if (messagesContainer) {
+                messagesContainer.scrollTo({ top: messagesContainer.scrollHeight, behavior: 'smooth' });
+            }
+        });
+    }
 }
 
     async function main() {
-        applyDefaultSettings();
-        // Ensure default animation speed is set on first run
+        try {
+            applyDefaultSettings();
+            // Ensure default animation speed is set on first run
         let settings = JSON.parse(localStorage.getItem(THEME_SETTINGS_KEY)) || {};
         if (settings.otkThreadTitleAnimationSpeed === undefined) {
             settings.otkThreadTitleAnimationSpeed = '1';
@@ -10255,7 +10260,15 @@ function setupScrollButtons() {
                     errorDisplay.style.color = "red";
                 }
             }
+        } catch (error) {
+            consoleError("Critical error during main setup/migration sequence:", error);
+            const errorDisplay = document.getElementById('otk-thread-title-display');
+            if (errorDisplay) {
+                errorDisplay.textContent = "Tracker Error! Check Console.";
+                errorDisplay.style.color = "red";
+            }
         }
+    }
 
         startAutoEmbedReloader();
         startSuspensionChecker();
@@ -10541,7 +10554,9 @@ function setupScrollButtons() {
 }
 
         // Kick off the script using the main async function
-        main().finally(() => {
+        main().catch(error => {
+            consoleError("Critical error during main execution sequence:", error);
+        }).finally(() => {
             // Final verification log after main execution sequence
             const centerInfo = document.getElementById('otk-center-info-container');
             if (centerInfo) {
@@ -10657,6 +10672,11 @@ async function fetchTimezones() {
 function setupTimezoneSearch() {
     const searchInput = document.getElementById('otk-timezone-search-input');
     const searchResultsDiv = document.getElementById('otk-timezone-search-results');
+
+    if (!searchInput || !searchResultsDiv) {
+        consoleWarn("Timezone search input or results container not found, skipping search setup.");
+        return;
+    }
 
     const addZoneItem = (city) => {
         const resultDiv = document.createElement('div');
