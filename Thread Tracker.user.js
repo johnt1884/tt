@@ -7,10 +7,15 @@
 // @grant        GM_xmlhttpRequest
 // @grant        GM.getValue
 // @grant        GM.setValue
+// @noframes
 // ==/UserScript==
 
 (function() {
     'use strict';
+
+    if (window.self !== window.top) {
+        return;
+    }
 
 function createStatsDisplayElements(statsWrapperParam) {
     const statsWrapper = statsWrapperParam || document.getElementById('otk-stats-wrapper');
