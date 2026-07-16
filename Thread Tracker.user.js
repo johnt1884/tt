@@ -10167,7 +10167,11 @@ function setupScrollButtons() {
             document.documentElement.style.setProperty('--otk-scroll-top-bottom-icon-color', scrollIconColor);
 
         applyScrollButtonPosition();
-        await fetchTimezones();
+        try {
+            await fetchTimezones();
+        } catch (error) {
+            consoleError("Failed to fetch timezones, continuing initialization anyway:", error);
+        }
         setupTimezoneSearch();
 
         consoleLog('Attempting to call setupLoadingScreen...');
