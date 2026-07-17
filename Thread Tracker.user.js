@@ -1,10 +1,12 @@
 // ==UserScript==
 // @name         Thread Tracker
 // @namespace    http://tampermonkey.net/
-// @version      2.8
+// @version      2.9
 // @description  Tracks OTK threads on /b/, stores messages and media, shows top bar with colors and controls, removes inactive threads entirely
 // @match        https://boards.4chan.org/b/
 // @grant        GM_xmlhttpRequest
+// @grant        GM_getValue
+// @grant        GM_setValue
 // @grant        GM.getValue
 // @grant        GM.setValue
 // @noframes
@@ -13,9 +15,69 @@
 (function() {
     'use strict';
 
+    console.log("[OTK Tracker Diagnostic] Script executing. Version: 2.9");
+    console.log("[OTK Tracker Diagnostic] Environment - URL:", window.location.href);
+    console.log("[OTK Tracker Diagnostic] Environment - Context:", window.self === window.top ? "TOP-LEVEL" : "IFRAME");
+    console.log("[OTK Tracker Diagnostic] Environment - document.body exists:", !!document.body);
+
     if (window.self !== window.top) {
+        console.log("[OTK Tracker Diagnostic] Exiting early because this is an IFRAME.");
         return;
     }
+
+    const GM_safe_getValue = async (key, defaultValue) => {
+        try {
+            if (typeof GM_getValue !== 'undefined') {
+                const val = GM_getValue(key);
+                if (val !== undefined && val !== null) {
+                    if (typeof val === 'string' && (val.startsWith('{') || val.startsWith('['))) {
+                        try { return JSON.parse(val); } catch (e) {}
+                    }
+                    return val;
+                }
+                return defaultValue;
+            }
+            if (typeof GM !== 'undefined' && GM.getValue) {
+                const val = await GM.getValue(key, defaultValue);
+                if (typeof val === 'string' && (val.startsWith('{') || val.startsWith('['))) {
+                    try { return JSON.parse(val); } catch (e) {}
+                }
+                return val;
+            }
+        } catch (e) {
+            console.error("Error in GM_safe_getValue:", e);
+        }
+        const val = localStorage.getItem(key);
+        if (val === null) return defaultValue;
+        try {
+            return JSON.parse(val);
+        } catch (e) {
+            return val;
+        }
+    };
+
+    const GM_safe_setValue = async (key, value) => {
+        try {
+            if (typeof GM_setValue !== 'undefined') {
+                const valToSet = typeof value === 'object' ? JSON.stringify(value) : value;
+                GM_setValue(key, valToSet);
+                return;
+            }
+            if (typeof GM !== 'undefined' && GM.setValue) {
+                const valToSet = typeof value === 'object' ? JSON.stringify(value) : value;
+                await GM.setValue(key, valToSet);
+                return;
+            }
+        } catch (e) {
+            console.error("Error in GM_safe_setValue:", e);
+        }
+        localStorage.setItem(key, typeof value === 'object' ? JSON.stringify(value) : value);
+    };
+
+    let isInitialized = false;
+    function init() {
+        if (isInitialized) return;
+        isInitialized = true;
 
 function createStatsDisplayElements(statsWrapperParam) {
     const statsWrapper = statsWrapperParam || document.getElementById('otk-stats-wrapper');
@@ -1127,7 +1189,7 @@ function createTweetEmbedElement(tweetId) {
 
         const otkThreadTitleDisplay = document.createElement('div');
         otkThreadTitleDisplay.id = 'otk-thread-title-display';
-        otkThreadTitleDisplay.textContent = 'Thread Tracker 2.7';
+        otkThreadTitleDisplay.textContent = 'Thread Tracker 2.9';
         otkThreadTitleDisplay.style.cssText = `
             font-weight: bold;
             font-size: 14px;
@@ -1335,7 +1397,7 @@ function createTweetEmbedElement(tweetId) {
 
             const otkThreadTitleDisplay = document.createElement('div');
             otkThreadTitleDisplay.id = 'otk-thread-title-display';
-            otkThreadTitleDisplay.textContent = 'Thread Tracker 2.7'; // Updated version
+            otkThreadTitleDisplay.textContent = 'Thread Tracker 2.9'; // Updated version
             otkThreadTitleDisplay.style.cssText = `
                 font-weight: bold; font-size: 14px; display: inline;
                 color: var(--otk-title-text-color); /* Apply specific color variable */
@@ -1424,8 +1486,8 @@ function createTweetEmbedElement(tweetId) {
         }
         // Update title if it exists and shows old version
         const titleDisplay = document.getElementById('otk-thread-title-display');
-        if (titleDisplay && titleDisplay.textContent !== 'Thread Tracker 2.7') {
-            titleDisplay.textContent = 'Thread Tracker 2.7';
+        if (titleDisplay && titleDisplay.textContent !== 'Thread Tracker 2.9') {
+            titleDisplay.textContent = 'Thread Tracker 2.9';
         }
     }
 
@@ -6686,9 +6748,9 @@ async function applyMainTheme() {
     }
 
     try {
-        const mainThemeSettings = await GM.getValue(MAIN_THEME_KEY);
+        const mainThemeSettings = await GM_safe_getValue(MAIN_THEME_KEY);
         if (mainThemeSettings) {
-            const parsedSettings = JSON.parse(mainThemeSettings);
+            const parsedSettings = typeof mainThemeSettings === 'string' ? JSON.parse(mainThemeSettings) : mainThemeSettings;
             localStorage.setItem(THEME_SETTINGS_KEY, JSON.stringify(parsedSettings));
             consoleLog('[Theme] Loaded main theme from GM storage into localStorage.');
         } else {
@@ -9869,7 +9931,7 @@ function setupScrollButtons() {
             consoleLog('Clock settings migrated to new multi-clock format.');
         }
 
-        consoleLog("Starting OTK Thread Tracker script (v2.8)...");
+        consoleLog("Starting OTK Thread Tracker script (v2.9)...");
 
         try {
             const storedBlurred = JSON.parse(localStorage.getItem(BLURRED_IMAGES_KEY));
@@ -10166,37 +10228,41 @@ function setupScrollButtons() {
         document.head.appendChild(styleElement);
         consoleLog("Injected CSS for anchored messages and multi-quote.");
 
-        await applyMainTheme();
-        setupOptionsWindow(); // Call to create the options window shell and event listeners
-        setupFilterWindow();
-        applyThemeSettings(); // Apply any saved theme settings
-
-            // Explicitly set the scroll icon color from storage, falling back to the default if not set.
-            const themeSettings = JSON.parse(localStorage.getItem(THEME_SETTINGS_KEY)) || {};
-            const scrollIconColor = themeSettings.scrollTopBottomIconColor || '#FFFFFF';
-            document.documentElement.style.setProperty('--otk-scroll-top-bottom-icon-color', scrollIconColor);
-
-        applyScrollButtonPosition();
-        try {
-            await fetchTimezones();
-        } catch (error) {
-            consoleError("Failed to fetch timezones, continuing initialization anyway:", error);
-        }
-        setupTimezoneSearch();
-
         consoleLog('Attempting to call setupLoadingScreen...');
         setupLoadingScreen(); // Create loading screen elements early
         consoleLog('Call to setupLoadingScreen finished.');
         ensureViewerExists(); // Ensure viewer div is in DOM early
 
-        // Note: mediaIntersectionObserver itself is initialized within renderMessagesInViewer
-
         try {
             consoleLog("Main function start.");
             await initDB();
-                consoleLog("IndexedDB initialization attempt complete.");
-                messagesByThreadId = await loadMessagesFromDB();
-                consoleLog("messagesByThreadId after load:", messagesByThreadId);
+            consoleLog("IndexedDB initialization attempt complete.");
+            messagesByThreadId = await loadMessagesFromDB();
+            consoleLog("messagesByThreadId after load:", messagesByThreadId);
+        } catch (dbError) {
+            consoleError("Critical error during early database initialization:", dbError);
+        }
+
+        await applyMainTheme();
+        setupOptionsWindow(); // Call to create the options window shell and event listeners
+        setupFilterWindow();
+        applyThemeSettings(); // Apply any saved theme settings
+
+        // Explicitly set the scroll icon color from storage, falling back to the default if not set.
+        const themeSettings = JSON.parse(localStorage.getItem(THEME_SETTINGS_KEY)) || {};
+        const scrollIconColor = themeSettings.scrollTopBottomIconColor || '#FFFFFF';
+        document.documentElement.style.setProperty('--otk-scroll-top-bottom-icon-color', scrollIconColor);
+
+        applyScrollButtonPosition();
+
+        // Non-blocking background fetch of timezones
+        fetchTimezones().then(() => {
+            setupTimezoneSearch();
+        }).catch(error => {
+            consoleError("Failed to fetch timezones, continuing initialization anyway:", error);
+        });
+
+        try {
 
 
 
@@ -10286,7 +10352,7 @@ function setupScrollButtons() {
     panel.appendChild(profilesContainer);
 
     try {
-        const profiles = await GM.getValue('otkSettingsProfiles', {});
+        const profiles = await GM_safe_getValue('otkSettingsProfiles', {});
         const profileNames = Object.keys(profiles);
 
         if (profileNames.length > 0) {
@@ -10331,7 +10397,7 @@ function setupScrollButtons() {
                         const saveName = async () => {
                             const newName = input.value.trim();
                             if (newName && newName !== profileName) {
-                                let currentProfiles = await GM.getValue('otkSettingsProfiles', {});
+                                let currentProfiles = await GM_safe_getValue('otkSettingsProfiles', {});
                                 if (currentProfiles[newName]) {
                                     alert('A profile with this name already exists.');
                                     colorBar.replaceChild(profileNameSpan, input); // revert
@@ -10339,7 +10405,7 @@ function setupScrollButtons() {
                                 }
                                 currentProfiles[newName] = currentProfiles[profileName];
                                 delete currentProfiles[profileName];
-                                await GM.setValue('otkSettingsProfiles', currentProfiles);
+                                await GM_safe_setValue('otkSettingsProfiles', currentProfiles);
                                 renderSettingsManagementPanel(); // Re-render to update everything
                             } else {
                                 colorBar.replaceChild(profileNameSpan, input); // Revert if name is empty or unchanged
@@ -10376,9 +10442,9 @@ function setupScrollButtons() {
                     removeProfileBtn.style.padding = '2px 8px';
                     removeProfileBtn.addEventListener('click', async () => {
                         if (confirm(`Are you sure you want to remove the "${profileName}" settings profile?`)) {
-                            let currentProfiles = await GM.getValue('otkSettingsProfiles', {});
+                            let currentProfiles = await GM_safe_getValue('otkSettingsProfiles', {});
                             delete currentProfiles[profileName];
-                            await GM.setValue('otkSettingsProfiles', currentProfiles);
+                            await GM_safe_setValue('otkSettingsProfiles', currentProfiles);
                             renderSettingsManagementPanel();
                         }
                     });
@@ -10440,9 +10506,9 @@ function setupScrollButtons() {
             if (value !== null) allSettings[key] = value;
         });
 
-        let profiles = await GM.getValue('otkSettingsProfiles', {});
+        let profiles = await GM_safe_getValue('otkSettingsProfiles', {});
         profiles[profileName] = allSettings;
-        await GM.setValue('otkSettingsProfiles', profiles);
+        await GM_safe_setValue('otkSettingsProfiles', profiles);
 
         renderSettingsManagementPanel(); // Re-render the whole panel
     });
@@ -10728,6 +10794,23 @@ function setupTimezoneSearch() {
         results.forEach(addZoneItem);
     });
 }
+
+    } // end of init()
+
+    if (document.body) {
+        init();
+    } else {
+        const checkBody = setInterval(() => {
+            if (document.body) {
+                clearInterval(checkBody);
+                init();
+            }
+        }, 10);
+        document.addEventListener('DOMContentLoaded', () => {
+            clearInterval(checkBody);
+            init();
+        });
+    }
 
 })();
 
