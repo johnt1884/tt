@@ -9,6 +9,9 @@
 // @grant        GM_setValue
 // @grant        GM.getValue
 // @grant        GM.setValue
+// @connect      4cdn.org
+// @connect      github.com
+// @connect      githubusercontent.com
 // @noframes
 // ==/UserScript==
 
@@ -4693,15 +4696,39 @@ function createMessageElementDOM(message, mediaLoadPromises, uniqueImageViewerHa
             const mediaUrl = `https://i.4cdn.org/${board}/${post.tim}${post.ext}`;
             try {
                 const mediaResponse = await new Promise((resolve, reject) => {
+                    let completed = false;
+                    const failsafe = setTimeout(() => {
+                        if (!completed) {
+                            completed = true;
+                            reject(new Error("Failsafe Timeout"));
+                        }
+                    }, 12000); // 12 seconds failsafe
+
                     GM_xmlhttpRequest({
                         method: "GET", url: mediaUrl, responseType: 'blob',
                         timeout: 10000,
                         onload: (response) => {
-                            if (response.status === 200) resolve(response.response);
-                            else reject(new Error(`Fetch failed: ${response.status}`));
+                            if (!completed) {
+                                completed = true;
+                                clearTimeout(failsafe);
+                                if (response.status === 200) resolve(response.response);
+                                else reject(new Error(`Fetch failed: ${response.status}`));
+                            }
                         },
-                        onerror: (error) => reject(error),
-                        ontimeout: () => reject(new Error("Timeout"))
+                        onerror: (error) => {
+                            if (!completed) {
+                                completed = true;
+                                clearTimeout(failsafe);
+                                reject(error);
+                            }
+                        },
+                        ontimeout: () => {
+                            if (!completed) {
+                                completed = true;
+                                clearTimeout(failsafe);
+                                reject(new Error("Timeout"));
+                            }
+                        }
                     });
                 });
 
@@ -4747,15 +4774,39 @@ function createMessageElementDOM(message, mediaLoadPromises, uniqueImageViewerHa
                     const thumbUrl = `https://i.4cdn.org/${board}/${post.tim}s.jpg`;
                     try {
                         const thumbResponse = await new Promise((resolve, reject) => {
+                            let completed = false;
+                            const failsafe = setTimeout(() => {
+                                if (!completed) {
+                                    completed = true;
+                                    reject(new Error("Failsafe Timeout"));
+                                }
+                            }, 7000); // 7 seconds failsafe
+
                             GM_xmlhttpRequest({
                                 method: "GET", url: thumbUrl, responseType: 'blob',
                                 timeout: 5000,
                                 onload: (response) => {
-                                    if (response.status === 200) resolve(response.response);
-                                    else reject(new Error(`Fetch failed: ${response.status}`));
+                                    if (!completed) {
+                                        completed = true;
+                                        clearTimeout(failsafe);
+                                        if (response.status === 200) resolve(response.response);
+                                        else reject(new Error(`Fetch failed: ${response.status}`));
+                                    }
                                 },
-                                onerror: (error) => reject(error),
-                                ontimeout: () => reject(new Error("Timeout"))
+                                onerror: (error) => {
+                                    if (!completed) {
+                                        completed = true;
+                                        clearTimeout(failsafe);
+                                        reject(error);
+                                    }
+                                },
+                                ontimeout: () => {
+                                    if (!completed) {
+                                        completed = true;
+                                        clearTimeout(failsafe);
+                                        reject(new Error("Timeout"));
+                                    }
+                                }
                             });
                         });
                         if (thumbResponse) {
