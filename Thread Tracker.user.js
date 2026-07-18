@@ -94,6 +94,10 @@
 
         // Fall back to GM_xmlhttpRequest
         return new Promise((resolve, reject) => {
+            if (typeof GM_xmlhttpRequest === 'undefined') {
+                reject(new Error("GM_xmlhttpRequest is not defined"));
+                return;
+            }
             let completed = false;
             const failsafe = setTimeout(() => {
                 if (!completed) {
@@ -105,16 +109,15 @@
             GM_xmlhttpRequest({
                 method: "GET", url: url, responseType: 'blob',
                 timeout: timeoutMs,
-                headers: {
-                    "Referer": "https://boards.4chan.org/",
-                    "User-Agent": navigator.userAgent
-                },
                 onload: (response) => {
                     if (!completed) {
                         completed = true;
                         clearTimeout(failsafe);
-                        if (response.status === 200) resolve(response.response);
-                        else reject(new Error(`Fetch failed: ${response.status}`));
+                        if (response.status === 200) {
+                            resolve(response.response);
+                        } else {
+                            reject(new Error(`Fetch failed: ${response.status}`));
+                        }
                     }
                 },
                 onerror: (error) => {
