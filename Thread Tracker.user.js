@@ -77,6 +77,64 @@
         localStorage.setItem(key, typeof value === 'object' ? JSON.stringify(value) : value);
     };
 
+    const safeFetchBlob = async (url, timeoutMs = 10000) => {
+        // Try standard browser fetch first
+        try {
+            const controller = new AbortController();
+            const id = setTimeout(() => controller.abort(), timeoutMs);
+            const response = await fetch(url, { signal: controller.signal });
+            clearTimeout(id);
+            if (response.ok) {
+                const blob = await response.blob();
+                return blob;
+            }
+        } catch (e) {
+            // Standard fetch failed or CORS blocked, we will fall back to GM_xmlhttpRequest
+        }
+
+        // Fall back to GM_xmlhttpRequest
+        return new Promise((resolve, reject) => {
+            let completed = false;
+            const failsafe = setTimeout(() => {
+                if (!completed) {
+                    completed = true;
+                    reject(new Error("Failsafe Timeout"));
+                }
+            }, timeoutMs + 2000);
+
+            GM_xmlhttpRequest({
+                method: "GET", url: url, responseType: 'blob',
+                timeout: timeoutMs,
+                headers: {
+                    "Referer": "https://boards.4chan.org/",
+                    "User-Agent": navigator.userAgent
+                },
+                onload: (response) => {
+                    if (!completed) {
+                        completed = true;
+                        clearTimeout(failsafe);
+                        if (response.status === 200) resolve(response.response);
+                        else reject(new Error(`Fetch failed: ${response.status}`));
+                    }
+                },
+                onerror: (error) => {
+                    if (!completed) {
+                        completed = true;
+                        clearTimeout(failsafe);
+                        reject(error);
+                    }
+                },
+                ontimeout: () => {
+                    if (!completed) {
+                        completed = true;
+                        clearTimeout(failsafe);
+                        reject(new Error("Timeout"));
+                    }
+                }
+            });
+        });
+    };
+
     let isInitialized = false;
     function init() {
         if (isInitialized) return;
@@ -3461,25 +3519,18 @@ function _populateAttachmentDivWithMedia(
 
         const downloadHandler = () => {
             const url = `https://i.4cdn.org/${actualBoardForLink}/${message.attachment.tim}${message.attachment.ext}`;
-            GM_xmlhttpRequest({
-                method: "GET",
-                url: url,
-                responseType: 'blob',
-                onload: function(response) {
-                    const blob = response.response;
-                    const objectUrl = URL.createObjectURL(blob);
-                    const link = document.createElement('a');
-                    link.href = objectUrl;
-                    link.download = message.attachment.filename;
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                    URL.revokeObjectURL(objectUrl);
-                },
-                onerror: function(error) {
-                    consoleError("Error downloading file:", error);
-                    alert("Failed to download file. See console for details.");
-                }
+            safeFetchBlob(url, 15000).then(blob => {
+                const objectUrl = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = objectUrl;
+                link.download = message.attachment.filename;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(objectUrl);
+            }).catch(error => {
+                consoleError("Error downloading file:", error);
+                alert("Failed to download file. See console for details.");
             });
         };
 
@@ -4695,42 +4746,7 @@ function createMessageElementDOM(message, mediaLoadPromises, uniqueImageViewerHa
             const { post, message, filehash_db_key, board } = item;
             const mediaUrl = `https://i.4cdn.org/${board}/${post.tim}${post.ext}`;
             try {
-                const mediaResponse = await new Promise((resolve, reject) => {
-                    let completed = false;
-                    const failsafe = setTimeout(() => {
-                        if (!completed) {
-                            completed = true;
-                            reject(new Error("Failsafe Timeout"));
-                        }
-                    }, 12000); // 12 seconds failsafe
-
-                    GM_xmlhttpRequest({
-                        method: "GET", url: mediaUrl, responseType: 'blob',
-                        timeout: 10000,
-                        onload: (response) => {
-                            if (!completed) {
-                                completed = true;
-                                clearTimeout(failsafe);
-                                if (response.status === 200) resolve(response.response);
-                                else reject(new Error(`Fetch failed: ${response.status}`));
-                            }
-                        },
-                        onerror: (error) => {
-                            if (!completed) {
-                                completed = true;
-                                clearTimeout(failsafe);
-                                reject(error);
-                            }
-                        },
-                        ontimeout: () => {
-                            if (!completed) {
-                                completed = true;
-                                clearTimeout(failsafe);
-                                reject(new Error("Timeout"));
-                            }
-                        }
-                    });
-                });
+                const mediaResponse = await safeFetchBlob(mediaUrl, 10000);
 
                 if (mediaResponse) {
                     const blob = mediaResponse;
@@ -4773,42 +4789,7 @@ function createMessageElementDOM(message, mediaLoadPromises, uniqueImageViewerHa
                 } else {
                     const thumbUrl = `https://i.4cdn.org/${board}/${post.tim}s.jpg`;
                     try {
-                        const thumbResponse = await new Promise((resolve, reject) => {
-                            let completed = false;
-                            const failsafe = setTimeout(() => {
-                                if (!completed) {
-                                    completed = true;
-                                    reject(new Error("Failsafe Timeout"));
-                                }
-                            }, 7000); // 7 seconds failsafe
-
-                            GM_xmlhttpRequest({
-                                method: "GET", url: thumbUrl, responseType: 'blob',
-                                timeout: 5000,
-                                onload: (response) => {
-                                    if (!completed) {
-                                        completed = true;
-                                        clearTimeout(failsafe);
-                                        if (response.status === 200) resolve(response.response);
-                                        else reject(new Error(`Fetch failed: ${response.status}`));
-                                    }
-                                },
-                                onerror: (error) => {
-                                    if (!completed) {
-                                        completed = true;
-                                        clearTimeout(failsafe);
-                                        reject(error);
-                                    }
-                                },
-                                ontimeout: () => {
-                                    if (!completed) {
-                                        completed = true;
-                                        clearTimeout(failsafe);
-                                        reject(new Error("Timeout"));
-                                    }
-                                }
-                            });
-                        });
+                        const thumbResponse = await safeFetchBlob(thumbUrl, 5000);
                         if (thumbResponse) {
                             const thumbBlob = thumbResponse;
                             const thumbStoreTransaction = otkMediaDB.transaction(['mediaStore'], 'readwrite');
