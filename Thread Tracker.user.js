@@ -4695,11 +4695,13 @@ function createMessageElementDOM(message, mediaLoadPromises, uniqueImageViewerHa
                 const mediaResponse = await new Promise((resolve, reject) => {
                     GM_xmlhttpRequest({
                         method: "GET", url: mediaUrl, responseType: 'blob',
+                        timeout: 10000,
                         onload: (response) => {
                             if (response.status === 200) resolve(response.response);
                             else reject(new Error(`Fetch failed: ${response.status}`));
                         },
-                        onerror: (error) => reject(error)
+                        onerror: (error) => reject(error),
+                        ontimeout: () => reject(new Error("Timeout"))
                     });
                 });
 
@@ -4747,11 +4749,13 @@ function createMessageElementDOM(message, mediaLoadPromises, uniqueImageViewerHa
                         const thumbResponse = await new Promise((resolve, reject) => {
                             GM_xmlhttpRequest({
                                 method: "GET", url: thumbUrl, responseType: 'blob',
+                                timeout: 5000,
                                 onload: (response) => {
                                     if (response.status === 200) resolve(response.response);
                                     else reject(new Error(`Fetch failed: ${response.status}`));
                                 },
-                                onerror: (error) => reject(error)
+                                onerror: (error) => reject(error),
+                                ontimeout: () => reject(new Error("Timeout"))
                             });
                         });
                         if (thumbResponse) {
@@ -9892,9 +9896,8 @@ function setupScrollButtons() {
 }
 
     async function main() {
-        try {
-            applyDefaultSettings();
-            // Ensure default animation speed is set on first run
+        applyDefaultSettings();
+        // Ensure default animation speed is set on first run
         let settings = JSON.parse(localStorage.getItem(THEME_SETTINGS_KEY)) || {};
         if (settings.otkThreadTitleAnimationSpeed === undefined) {
             settings.otkThreadTitleAnimationSpeed = '1';
@@ -10263,11 +10266,8 @@ function setupScrollButtons() {
         });
 
         try {
-
-
-
-                // Recalculate and display initial media stats
-                await recalculateAndStoreMediaStats(); // This updates localStorage
+            // Recalculate and display initial media stats
+            await recalculateAndStoreMediaStats(); // This updates localStorage
                 updateDisplayedStatistics(); // This reads from localStorage and updates GUI
                 consoleLog("Stats updated.");
 
@@ -10326,15 +10326,7 @@ function setupScrollButtons() {
                     errorDisplay.style.color = "red";
                 }
             }
-        } catch (error) {
-            consoleError("Critical error during main setup/migration sequence:", error);
-            const errorDisplay = document.getElementById('otk-thread-title-display');
-            if (errorDisplay) {
-                errorDisplay.textContent = "Tracker Error! Check Console.";
-                errorDisplay.style.color = "red";
-            }
         }
-    }
 
         startAutoEmbedReloader();
         startSuspensionChecker();
