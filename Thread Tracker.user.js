@@ -78,18 +78,20 @@
     };
 
     const safeFetchBlob = async (url, timeoutMs = 10000) => {
-        // Try standard browser fetch first
-        try {
-            const controller = new AbortController();
-            const id = setTimeout(() => controller.abort(), timeoutMs);
-            const response = await fetch(url, { signal: controller.signal });
-            clearTimeout(id);
-            if (response.ok) {
-                const blob = await response.blob();
-                return blob;
+        // Try standard browser fetch first, but skip for i.4cdn.org as it lacks CORS headers
+        if (!url.includes('i.4cdn.org')) {
+            try {
+                const controller = new AbortController();
+                const id = setTimeout(() => controller.abort(), timeoutMs);
+                const response = await fetch(url, { signal: controller.signal });
+                clearTimeout(id);
+                if (response.ok) {
+                    const blob = await response.blob();
+                    return blob;
+                }
+            } catch (e) {
+                // Standard fetch failed or CORS blocked, we will fall back to GM_xmlhttpRequest
             }
-        } catch (e) {
-            // Standard fetch failed or CORS blocked, we will fall back to GM_xmlhttpRequest
         }
 
         // Fall back to GM_xmlhttpRequest
