@@ -77,7 +77,8 @@
         localStorage.setItem(key, typeof value === 'object' ? JSON.stringify(value) : value);
     };
 
-    const safeFetchBlob = async (url, timeoutMs = 10000) => {
+    let consecutiveTimeouts = 0;
+    const safeFetchBlob = async (url, timeoutMs = 3000) => {
         // Try standard browser fetch first, but skip for i.4cdn.org as it lacks CORS headers
         if (!url.includes('i.4cdn.org')) {
             try {
@@ -87,6 +88,7 @@
                 clearTimeout(id);
                 if (response.ok) {
                     const blob = await response.blob();
+                    consecutiveTimeouts = 0;
                     return blob;
                 }
             } catch (e) {
@@ -104,9 +106,13 @@
             const failsafe = setTimeout(() => {
                 if (!completed) {
                     completed = true;
+                    consecutiveTimeouts++;
+                    if (consecutiveTimeouts >= 3) {
+                        console.warn("[OTK Tracker] WARNING: Multiple media downloads are timing out. If you are using Brave browser, this is likely because Brave Shields is set to 'Aggressive' (which blocks background extension requests). Please set Brave Shields to 'Standard' for 4chan.org or check Violentmonkey/extension permissions.");
+                    }
                     reject(new Error("Failsafe Timeout"));
                 }
-            }, timeoutMs + 2000);
+            }, timeoutMs + 1000);
 
             GM_xmlhttpRequest({
                 method: "GET", url: url, responseType: 'blob',
@@ -116,6 +122,7 @@
                         completed = true;
                         clearTimeout(failsafe);
                         if (response.status === 200) {
+                            consecutiveTimeouts = 0;
                             resolve(response.response);
                         } else {
                             reject(new Error(`Fetch failed: ${response.status}`));
